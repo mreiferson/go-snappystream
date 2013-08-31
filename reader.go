@@ -3,7 +3,6 @@ package snappystream
 import (
 	"bytes"
 	"code.google.com/p/snappy-go/snappy"
-	"encoding/binary"
 	"errors"
 	"io"
 )
@@ -71,7 +70,7 @@ func (r *Reader) nextFrame() error {
 }
 
 func (r *Reader) readBlock() ([]byte, error) {
-	length := binary.LittleEndian.Uint32(r.hdr[1:4])
+	length := uint32(r.hdr[1]) | uint32(r.hdr[2])<<8 | uint32(r.hdr[3])<<16
 	if int(length) > len(r.src) {
 		r.src = make([]byte, length)
 	}

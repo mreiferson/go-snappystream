@@ -1,9 +1,7 @@
 package snappystream
 
 import (
-	"bytes"
 	"code.google.com/p/snappy-go/snappy"
-	"encoding/binary"
 	"io"
 )
 
@@ -26,7 +24,6 @@ func NewWriter(w io.Writer) *Writer {
 }
 
 func (w *Writer) Write(p []byte) (int, error) {
-	var buf bytes.Buffer
 	var err error
 
 	w.dst, err = snappy.Encode(w.dst, p)
@@ -42,15 +39,18 @@ func (w *Writer) Write(p []byte) (int, error) {
 		w.sentStreamID = true
 	}
 
-	err = binary.Write(&buf, binary.LittleEndian, uint32(len(w.dst)))
+	length := uint32(len(w.dst))
+	w.hdr[0] = 0x00 // compressed frame ID
+	w.hdr[1] = byte(length)
+    w.hdr[2] = byte(length >> 8)
+    w.hdr[3] = byte(length >> 16)
+	_, err = w.Writer.Write(w.hdr)
 	if err != nil {
 		return 0, err
 	}
-	copy(w.hdr[1:4], buf.Bytes()[:3])
-
-	_, err = w.Write(w.hdr)
+	_, err = w.Writer.Write(w.dst)
 	if err != nil {
 		return 0, err
 	}
-	return w.Writer.Write(w.dst)
+	return len(p), nil
 }
