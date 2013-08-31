@@ -42,8 +42,8 @@ func (w *Writer) Write(p []byte) (int, error) {
 	length := uint32(len(w.dst))
 	w.hdr[0] = 0x00 // compressed frame ID
 	w.hdr[1] = byte(length)
-    w.hdr[2] = byte(length >> 8)
-    w.hdr[3] = byte(length >> 16)
+	w.hdr[2] = byte(length >> 8)
+	w.hdr[3] = byte(length >> 16)
 	_, err = w.Writer.Write(w.hdr)
 	if err != nil {
 		return 0, err
