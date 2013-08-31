@@ -12,6 +12,7 @@ func TestReaderWriter(t *testing.T) {
 
 	w := NewWriter(&buf)
 	r := NewReader(&buf)
+	r.VerifyChecksum = true
 
 	n, err := w.Write(in)
 	if err != nil {

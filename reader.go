@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"code.google.com/p/snappy-go/snappy"
 	"errors"
+	"fmt"
+	"hash/crc32"
 	"io"
 )
 
 type Reader struct {
-	io.Reader
+	VerifyChecksum bool
+
+	rdr io.Reader
 	buf bytes.Buffer
 	hdr []byte
 	src []byte
@@ -17,10 +21,10 @@ type Reader struct {
 
 func NewReader(r io.Reader) *Reader {
 	return &Reader{
-		Reader: r,
-		hdr:    make([]byte, 4),
-		src:    make([]byte, 4096),
-		dst:    make([]byte, 4096),
+		rdr: r,
+		hdr: make([]byte, 4),
+		src: make([]byte, 4096),
+		dst: make([]byte, 4096),
 	}
 }
 
@@ -36,7 +40,7 @@ func (r *Reader) Read(b []byte) (int, error) {
 
 func (r *Reader) nextFrame() error {
 	for {
-		_, err := io.ReadFull(r.Reader, r.hdr)
+		_, err := io.ReadFull(r.rdr, r.hdr)
 		if err != nil {
 			return err
 		}
@@ -49,9 +53,17 @@ func (r *Reader) nextFrame() error {
 		switch r.hdr[0] {
 		case 0x00:
 			// compressed bytes
-			r.dst, err = snappy.Decode(r.dst, buf)
+			// first 4 bytes are the little endian crc32 checksum
+			checksum := unmaskChecksum(uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24)
+			r.dst, err = snappy.Decode(r.dst, buf[4:])
 			if err != nil {
 				return err
+			}
+			if r.VerifyChecksum {
+				actualChecksum := crc32.ChecksumIEEE(r.dst)
+				if checksum != actualChecksum {
+					return errors.New(fmt.Sprintf("invalid checksum %x != %x", checksum, actualChecksum))
+				}
 			}
 			_, err = r.buf.Write(r.dst)
 			return err
@@ -70,14 +82,27 @@ func (r *Reader) nextFrame() error {
 }
 
 func (r *Reader) readBlock() ([]byte, error) {
+	// 3 byte little endian length
 	length := uint32(r.hdr[1]) | uint32(r.hdr[2])<<8 | uint32(r.hdr[3])<<16
+
+	if length > 65536 {
+		return nil, errors.New("block too big")
+	}
+
 	if int(length) > len(r.src) {
 		r.src = make([]byte, length)
 	}
+
 	buf := r.src[:length]
-	_, err := io.ReadFull(r.Reader, buf)
+	_, err := io.ReadFull(r.rdr, buf)
 	if err != nil {
 		return nil, err
 	}
+
 	return buf, nil
+}
+
+func unmaskChecksum(c uint32) uint32 {
+	x := c - 0xa282ead8
+	return ((x >> 17) | (x << 15))
 }
