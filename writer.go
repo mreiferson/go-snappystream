@@ -11,6 +11,17 @@ import (
 // includes block header
 var streamID = []byte{0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59}
 
+// Writer provides an io.Writer interface to the snappy framed stream format.
+//
+// NewWriter should be used to create an instance of Writer (i.e. the zero value
+// of Writer is *not* usable).
+//
+// It transparently handles sending the stream identifier, calculating
+// checksums, and compressing/framing blocks.
+//
+// Internally, a buffer is maintained to hold a compressed
+// block.  It will automatically re-size up the the largest
+// block size, 65536.
 type Writer struct {
 	writer       io.Writer
 	hdr          []byte
@@ -18,6 +29,7 @@ type Writer struct {
 	sentStreamID bool
 }
 
+// NewWriter returns a new instance of Writer
 func NewWriter(w io.Writer) *Writer {
 	return &Writer{
 		writer: w,
@@ -27,6 +39,14 @@ func NewWriter(w io.Writer) *Writer {
 	}
 }
 
+// Write snappy compresses and frames p and writes
+// it to the wrapped io.Writer.
+//
+// The returned length will only ever be len(p) or 0
+// and if 0 err will be non-nil, regardless of the length
+// of *compressed* bytes written to the wrapped io.Writer.
+//
+// len(p) should never exceed 65532.
 func (w *Writer) Write(p []byte) (int, error) {
 	var err error
 

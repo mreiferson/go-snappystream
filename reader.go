@@ -9,6 +9,18 @@ import (
 	"io"
 )
 
+// Reader provides an io.Reader interface to the snappy framed stream format.
+//
+// NewReader should be used to create an instance of Reader (i.e. the zero value
+// of Reader is *not* usable).
+//
+// It transparently handles reading the stream identifier (but does not proxy this
+// to the caller), decompresses blocks, and (optionally) validates checksums.
+//
+// Internally, three buffers are maintained.  The first two are for reading
+// off the wrapped io.Reader and for holding the decompressed block (both are grown
+// automatically and re-used and will never exceed the largest block size, 65536). The
+// last buffer contains the *unread* decompressed bytes (and can grow indefinitely).
 type Reader struct {
 	VerifyChecksum bool
 
@@ -20,6 +32,7 @@ type Reader struct {
 	dst []byte
 }
 
+// NewReader returns a new instance of Reader
 func NewReader(r io.Reader) *Reader {
 	return &Reader{
 		reader: r,
@@ -30,6 +43,13 @@ func NewReader(r io.Reader) *Reader {
 	}
 }
 
+// Read proxies bytes from the wrapped io.Reader, transparently
+// decompresses the next block, (optionally) validates the checksum.
+//
+// The returned length will be up to len(b) decompressed bytes, regardless
+// of the length of *compressed* bytes read from the wrapped io.Reader.
+//
+// len(b) should never exceed 65532.
 func (r *Reader) Read(b []byte) (int, error) {
 	if r.buf.Len() < len(b) {
 		err := r.nextFrame()
