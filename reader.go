@@ -12,7 +12,8 @@ import (
 type Reader struct {
 	VerifyChecksum bool
 
-	rdr io.Reader
+	reader io.Reader
+
 	buf bytes.Buffer
 	hdr []byte
 	src []byte
@@ -21,7 +22,8 @@ type Reader struct {
 
 func NewReader(r io.Reader) *Reader {
 	return &Reader{
-		rdr: r,
+		reader: r,
+
 		hdr: make([]byte, 4),
 		src: make([]byte, 4096),
 		dst: make([]byte, 4096),
@@ -40,7 +42,7 @@ func (r *Reader) Read(b []byte) (int, error) {
 
 func (r *Reader) nextFrame() error {
 	for {
-		_, err := io.ReadFull(r.rdr, r.hdr)
+		_, err := io.ReadFull(r.reader, r.hdr)
 		if err != nil {
 			return err
 		}
@@ -94,7 +96,7 @@ func (r *Reader) readBlock() ([]byte, error) {
 	}
 
 	buf := r.src[:length]
-	_, err := io.ReadFull(r.rdr, buf)
+	_, err := io.ReadFull(r.reader, buf)
 	if err != nil {
 		return nil, err
 	}

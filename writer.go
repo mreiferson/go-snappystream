@@ -10,7 +10,7 @@ import (
 var streamID = []byte{0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59}
 
 type Writer struct {
-	wrt          io.Writer
+	writer       io.Writer
 	hdr          []byte
 	dst          []byte
 	sentStreamID bool
@@ -18,7 +18,8 @@ type Writer struct {
 
 func NewWriter(w io.Writer) *Writer {
 	return &Writer{
-		wrt: w,
+		writer: w,
+
 		hdr: make([]byte, 8),
 		dst: make([]byte, 4096),
 	}
@@ -33,7 +34,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 	}
 
 	if !w.sentStreamID {
-		_, err := w.wrt.Write(streamID)
+		_, err := w.writer.Write(streamID)
 		if err != nil {
 			return 0, err
 		}
@@ -56,12 +57,12 @@ func (w *Writer) Write(p []byte) (int, error) {
 	w.hdr[6] = byte(checksum >> 16)
 	w.hdr[7] = byte(checksum >> 24)
 
-	_, err = w.wrt.Write(w.hdr)
+	_, err = w.writer.Write(w.hdr)
 	if err != nil {
 		return 0, err
 	}
 
-	_, err = w.wrt.Write(w.dst)
+	_, err = w.writer.Write(w.dst)
 	if err != nil {
 		return 0, err
 	}
