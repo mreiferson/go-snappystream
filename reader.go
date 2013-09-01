@@ -99,8 +99,11 @@ func (r *Reader) nextFrame() error {
 				return errors.New("invalid stream ID")
 			}
 			// continue...
+		default:
+			return errors.New("invalid frame identifier")
 		}
 	}
+	panic("should never happen")
 }
 
 func (r *Reader) readBlock() ([]byte, error) {
