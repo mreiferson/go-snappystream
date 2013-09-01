@@ -87,8 +87,8 @@ func (r *Reader) readBlock() ([]byte, error) {
 	// 3 byte little endian length
 	length := uint32(r.hdr[1]) | uint32(r.hdr[2])<<8 | uint32(r.hdr[3])<<16
 
-	if length > 65536 {
-		return nil, errors.New("block too big")
+	if length > MaxBlockSize {
+		return nil, errors.New(fmt.Sprintf("block too large %d > %d", length, MaxBlockSize))
 	}
 
 	if int(length) > len(r.src) {

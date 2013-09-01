@@ -2,6 +2,8 @@ package snappystream
 
 import (
 	"code.google.com/p/snappy-go/snappy"
+	"errors"
+	"fmt"
 	"hash/crc32"
 	"io"
 )
@@ -27,6 +29,10 @@ func NewWriter(w io.Writer) *Writer {
 
 func (w *Writer) Write(p []byte) (int, error) {
 	var err error
+
+	if len(p) > MaxBlockSize-4 {
+		return 0, errors.New(fmt.Sprintf("block too large %d > %d", len(p), MaxBlockSize-4))
+	}
 
 	w.dst, err = snappy.Encode(w.dst, p)
 	if err != nil {
