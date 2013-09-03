@@ -2,6 +2,7 @@ package snappystream
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"testing"
 )
@@ -55,7 +56,7 @@ func TestWriterChunk(t *testing.T) {
 	}
 
 	out := make([]byte, len(in))
-	n, err = r.Read(out)
+	n, err = io.ReadFull(r, out)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

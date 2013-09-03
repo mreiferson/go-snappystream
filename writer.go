@@ -8,8 +8,6 @@ import (
 	"io"
 )
 
-import "log"
-
 // includes block header
 var streamID = []byte{0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59}
 
@@ -57,7 +55,6 @@ func (w *Writer) Write(p []byte) (int, error) {
 		if i+sz > len(p) {
 			sz = len(p) - i
 		}
-		log.Printf("writing %d -> %d", i, i+sz)
 		n, err := w.write(p[i : i+sz])
 		if err != nil {
 			return 0, err

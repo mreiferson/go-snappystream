@@ -46,10 +46,10 @@ func NewReader(r io.Reader) *Reader {
 // Read proxies bytes from the wrapped io.Reader, transparently
 // decompresses the next block, (optionally) validates the checksum.
 //
-// The returned length will be up to len(b) decompressed bytes, regardless
+// The returned length will be up to the lesser of len(b) or 65536 decompressed bytes, regardless
 // of the length of *compressed* bytes read from the wrapped io.Reader.
 func (r *Reader) Read(b []byte) (int, error) {
-	for r.buf.Len() < len(b) {
+	if r.buf.Len() < len(b) {
 		err := r.nextFrame()
 		if err != nil {
 			return 0, err
