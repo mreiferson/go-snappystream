@@ -48,10 +48,8 @@ func NewReader(r io.Reader) *Reader {
 //
 // The returned length will be up to len(b) decompressed bytes, regardless
 // of the length of *compressed* bytes read from the wrapped io.Reader.
-//
-// len(b) should never exceed 65532.
 func (r *Reader) Read(b []byte) (int, error) {
-	if r.buf.Len() < len(b) {
+	for r.buf.Len() < len(b) {
 		err := r.nextFrame()
 		if err != nil {
 			return 0, err
@@ -73,25 +71,30 @@ func (r *Reader) nextFrame() error {
 		}
 
 		switch r.hdr[0] {
-		case 0x00:
-			// compressed bytes
+		case 0x00, 0x01:
+			// compressed or uncompressed bytes
+
 			// first 4 bytes are the little endian crc32 checksum
 			checksum := unmaskChecksum(uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24)
-			r.dst, err = snappy.Decode(r.dst, buf[4:])
-			if err != nil {
-				return err
+			b := buf[4:]
+
+			if r.hdr[0] == 0x00 {
+				// compressed bytes
+				r.dst, err = snappy.Decode(r.dst, b)
+				if err != nil {
+					return err
+				}
+				b = r.dst
 			}
+
 			if r.VerifyChecksum {
-				actualChecksum := crc32.ChecksumIEEE(r.dst)
+				actualChecksum := crc32.ChecksumIEEE(b)
 				if checksum != actualChecksum {
 					return errors.New(fmt.Sprintf("invalid checksum %x != %x", checksum, actualChecksum))
 				}
 			}
-			_, err = r.buf.Write(r.dst)
-			return err
-		case 0x01:
-			// uncompressed bytes
-			_, err = r.buf.Write(buf)
+
+			_, err = r.buf.Write(b)
 			return err
 		case 0xff:
 			// stream identifier
@@ -110,8 +113,9 @@ func (r *Reader) readBlock() ([]byte, error) {
 	// 3 byte little endian length
 	length := uint32(r.hdr[1]) | uint32(r.hdr[2])<<8 | uint32(r.hdr[3])<<16
 
-	if length > MaxBlockSize {
-		return nil, errors.New(fmt.Sprintf("block too large %d > %d", length, MaxBlockSize))
+	// +4 for checksum
+	if length > (MaxBlockSize + 4) {
+		return nil, errors.New(fmt.Sprintf("block too large %d > %d", length, (MaxBlockSize + 4)))
 	}
 
 	if int(length) > len(r.src) {

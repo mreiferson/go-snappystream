@@ -8,6 +8,8 @@ import (
 	"io"
 )
 
+import "log"
+
 // includes block header
 var streamID = []byte{0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59}
 
@@ -46,12 +48,30 @@ func NewWriter(w io.Writer) *Writer {
 // and if 0 err will be non-nil, regardless of the length
 // of *compressed* bytes written to the wrapped io.Writer.
 //
-// len(p) should never exceed 65532.
+// If len(p) exceeds 65536, the slice will be chunked into
+// smaller blocks.
 func (w *Writer) Write(p []byte) (int, error) {
+	total := 0
+	sz := 65536
+	for i := 0; i < len(p); i += 65536 {
+		if i+sz > len(p) {
+			sz = len(p) - i
+		}
+		log.Printf("writing %d -> %d", i, i+sz)
+		n, err := w.write(p[i : i+sz])
+		if err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+func (w *Writer) write(p []byte) (int, error) {
 	var err error
 
-	if len(p) > MaxBlockSize-4 {
-		return 0, errors.New(fmt.Sprintf("block too large %d > %d", len(p), MaxBlockSize-4))
+	if len(p) > MaxBlockSize {
+		return 0, errors.New(fmt.Sprintf("block too large %d > %d", len(p), MaxBlockSize))
 	}
 
 	w.dst, err = snappy.Encode(w.dst, p)

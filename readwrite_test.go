@@ -19,17 +19,48 @@ func TestReaderWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	if n != 4 {
-		t.Fatalf("wrote wrong amount %d != 4", n)
+	if n != len(in) {
+		t.Fatalf("wrote wrong amount %d != %d", n, len(in))
 	}
 
-	out := make([]byte, 4)
+	out := make([]byte, len(in))
 	n, err = r.Read(out)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	if n != 4 {
-		t.Fatalf("read wrong amount %d != 4", n)
+	if n != len(in) {
+		t.Fatalf("read wrong amount %d != %d", n, len(in))
+	}
+
+	if !bytes.Equal(out, in) {
+		t.Fatalf("bytes not equal %v != %v", out, in)
+	}
+}
+
+func TestWriterChunk(t *testing.T) {
+	var buf bytes.Buffer
+
+	in := make([]byte, 128000)
+
+	w := NewWriter(&buf)
+	r := NewReader(&buf)
+	r.VerifyChecksum = true
+
+	n, err := w.Write(in)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	if n != len(in) {
+		t.Fatalf("wrote wrong amount %d != %d", n, len(in))
+	}
+
+	out := make([]byte, len(in))
+	n, err = r.Read(out)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	if n != len(in) {
+		t.Fatalf("read wrong amount %d != %d", n, len(in))
 	}
 
 	if !bytes.Equal(out, in) {
