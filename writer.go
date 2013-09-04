@@ -11,7 +11,16 @@ import (
 // includes block header
 var streamID = []byte{0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59}
 
-// Writer provides an io.Writer interface to the snappy framed stream format.
+type writer struct {
+	writer io.Writer
+
+	hdr []byte
+	dst []byte
+
+	sentStreamID bool
+}
+
+// NewWriter returns an io.Writer interface to the snappy framed stream format.
 //
 // NewWriter should be used to create an instance of Writer (i.e. the zero value
 // of Writer is *not* usable).
@@ -22,16 +31,8 @@ var streamID = []byte{0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59
 // Internally, a buffer is maintained to hold a compressed
 // block.  It will automatically re-size up the the largest
 // block size, 65536.
-type Writer struct {
-	writer       io.Writer
-	hdr          []byte
-	dst          []byte
-	sentStreamID bool
-}
-
-// NewWriter returns a new instance of Writer
-func NewWriter(w io.Writer) *Writer {
-	return &Writer{
+func NewWriter(w io.Writer) io.Writer {
+	return &writer{
 		writer: w,
 
 		hdr: make([]byte, 8),
@@ -48,7 +49,7 @@ func NewWriter(w io.Writer) *Writer {
 //
 // If len(p) exceeds 65536, the slice will be chunked into
 // smaller blocks.
-func (w *Writer) Write(p []byte) (int, error) {
+func (w *writer) Write(p []byte) (int, error) {
 	total := 0
 	sz := 65536
 	for i := 0; i < len(p); i += 65536 {
@@ -64,7 +65,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 	return total, nil
 }
 
-func (w *Writer) write(p []byte) (int, error) {
+func (w *writer) write(p []byte) (int, error) {
 	var err error
 
 	if len(p) > MaxBlockSize {

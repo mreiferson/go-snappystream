@@ -9,10 +9,18 @@ import (
 	"io"
 )
 
-// Reader provides an io.Reader interface to the snappy framed stream format.
-//
-// NewReader should be used to create an instance of Reader (i.e. the zero value
-// of Reader is *not* usable).
+type reader struct {
+	reader io.Reader
+
+	verifyChecksum bool
+
+	buf bytes.Buffer
+	hdr []byte
+	src []byte
+	dst []byte
+}
+
+// NewReader returns an io.Reader interface to the snappy framed stream format.
 //
 // It transparently handles reading the stream identifier (but does not proxy this
 // to the caller), decompresses blocks, and (optionally) validates checksums.
@@ -21,21 +29,14 @@ import (
 // off the wrapped io.Reader and for holding the decompressed block (both are grown
 // automatically and re-used and will never exceed the largest block size, 65536). The
 // last buffer contains the *unread* decompressed bytes (and can grow indefinitely).
-type Reader struct {
-	VerifyChecksum bool
-
-	reader io.Reader
-
-	buf bytes.Buffer
-	hdr []byte
-	src []byte
-	dst []byte
-}
-
-// NewReader returns a new instance of Reader
-func NewReader(r io.Reader) *Reader {
-	return &Reader{
+//
+// The second param determines whether or not the reader will verify block
+// checksums and can be enabled/disabled with the constants VerifyChecksum and SkipVerifyChecksum
+func NewReader(r io.Reader, verifyChecksum bool) io.Reader {
+	return &reader{
 		reader: r,
+
+		verifyChecksum: verifyChecksum,
 
 		hdr: make([]byte, 4),
 		src: make([]byte, 4096),
@@ -48,7 +49,7 @@ func NewReader(r io.Reader) *Reader {
 //
 // The returned length will be up to the lesser of len(b) or 65536 decompressed bytes, regardless
 // of the length of *compressed* bytes read from the wrapped io.Reader.
-func (r *Reader) Read(b []byte) (int, error) {
+func (r *reader) Read(b []byte) (int, error) {
 	if r.buf.Len() < len(b) {
 		err := r.nextFrame()
 		if err != nil {
@@ -58,7 +59,7 @@ func (r *Reader) Read(b []byte) (int, error) {
 	return r.buf.Read(b)
 }
 
-func (r *Reader) nextFrame() error {
+func (r *reader) nextFrame() error {
 	for {
 		_, err := io.ReadFull(r.reader, r.hdr)
 		if err != nil {
@@ -87,7 +88,7 @@ func (r *Reader) nextFrame() error {
 				b = r.dst
 			}
 
-			if r.VerifyChecksum {
+			if r.verifyChecksum {
 				actualChecksum := crc32.ChecksumIEEE(b)
 				if checksum != actualChecksum {
 					return errors.New(fmt.Sprintf("invalid checksum %x != %x", checksum, actualChecksum))
@@ -109,7 +110,7 @@ func (r *Reader) nextFrame() error {
 	panic("should never happen")
 }
 
-func (r *Reader) readBlock() ([]byte, error) {
+func (r *reader) readBlock() ([]byte, error) {
 	// 3 byte little endian length
 	length := uint32(r.hdr[1]) | uint32(r.hdr[2])<<8 | uint32(r.hdr[3])<<16
 

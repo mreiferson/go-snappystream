@@ -4,3 +4,5 @@
 package snappystream
 
 const MaxBlockSize = 65536
+const VerifyChecksum = true
+const SkipVerifyChecksum = false
