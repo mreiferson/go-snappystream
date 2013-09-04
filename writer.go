@@ -22,9 +22,6 @@ type writer struct {
 
 // NewWriter returns an io.Writer interface to the snappy framed stream format.
 //
-// NewWriter should be used to create an instance of Writer (i.e. the zero value
-// of Writer is *not* usable).
-//
 // It transparently handles sending the stream identifier, calculating
 // checksums, and compressing/framing blocks.
 //
