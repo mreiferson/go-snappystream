@@ -28,6 +28,13 @@ type writer struct {
 // Internally, a buffer is maintained to hold a compressed
 // block.  It will automatically re-size up the the largest
 // block size, 65536.
+//
+// For each Write, the returned length will only ever be len(p) or 0, regardless
+// of the length of *compressed* bytes written to the wrapped io.Writer.
+//
+// If the returned length is 0 then error will be non-nil.
+//
+// If len(p) exceeds 65536, the slice will be automatically chunked into smaller blocks.
 func NewWriter(w io.Writer) io.Writer {
 	return &writer{
 		writer: w,
@@ -37,19 +44,10 @@ func NewWriter(w io.Writer) io.Writer {
 	}
 }
 
-// Write snappy compresses and frames p and writes
-// it to the wrapped io.Writer.
-//
-// The returned length will only ever be len(p) or 0
-// and if 0 err will be non-nil, regardless of the length
-// of *compressed* bytes written to the wrapped io.Writer.
-//
-// If len(p) exceeds 65536, the slice will be chunked into
-// smaller blocks.
 func (w *writer) Write(p []byte) (int, error) {
 	total := 0
-	sz := 65536
-	for i := 0; i < len(p); i += 65536 {
+	sz := MaxBlockSize
+	for i := 0; i < len(p); i += MaxBlockSize {
 		if i+sz > len(p) {
 			sz = len(p) - i
 		}

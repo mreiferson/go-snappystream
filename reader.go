@@ -32,6 +32,10 @@ type reader struct {
 //
 // The second param determines whether or not the reader will verify block
 // checksums and can be enabled/disabled with the constants VerifyChecksum and SkipVerifyChecksum
+//
+// For each Read, the returned length will be up to the lesser of len(b) or 65536
+// decompressed bytes, regardless of the length of *compressed* bytes read
+// from the wrapped io.Reader.
 func NewReader(r io.Reader, verifyChecksum bool) io.Reader {
 	return &reader{
 		reader: r,
@@ -44,11 +48,6 @@ func NewReader(r io.Reader, verifyChecksum bool) io.Reader {
 	}
 }
 
-// Read proxies bytes from the wrapped io.Reader, transparently
-// decompresses the next block, (optionally) validates the checksum.
-//
-// The returned length will be up to the lesser of len(b) or 65536 decompressed bytes, regardless
-// of the length of *compressed* bytes read from the wrapped io.Reader.
 func (r *reader) Read(b []byte) (int, error) {
 	if r.buf.Len() < len(b) {
 		err := r.nextFrame()
