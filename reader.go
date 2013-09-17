@@ -88,7 +88,7 @@ func (r *reader) nextFrame() error {
 			}
 
 			if r.verifyChecksum {
-				actualChecksum := crc32.ChecksumIEEE(b)
+				actualChecksum := crc32.Checksum(b, crcTable)
 				if checksum != actualChecksum {
 					return errors.New(fmt.Sprintf("invalid checksum %x != %x", checksum, actualChecksum))
 				}

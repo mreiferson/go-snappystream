@@ -90,7 +90,7 @@ func (w *writer) write(p []byte) (int, error) {
 	w.hdr[3] = byte(length >> 16)
 
 	// 4 byte little endian CRC32 checksum
-	checksum := maskChecksum(crc32.ChecksumIEEE(p))
+	checksum := maskChecksum(crc32.Checksum(p, crcTable))
 	w.hdr[4] = byte(checksum)
 	w.hdr[5] = byte(checksum >> 8)
 	w.hdr[6] = byte(checksum >> 16)
