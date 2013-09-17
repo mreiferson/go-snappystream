@@ -13,8 +13,7 @@ func TestReaderWriter(t *testing.T) {
 	in := []byte("test")
 
 	w := NewWriter(&buf)
-	r := NewReader(&buf)
-	r.VerifyChecksum = true
+	r := NewReader(&buf, VerifyChecksum)
 
 	n, err := w.Write(in)
 	if err != nil {
@@ -44,8 +43,7 @@ func TestWriterChunk(t *testing.T) {
 	in := make([]byte, 128000)
 
 	w := NewWriter(&buf)
-	r := NewReader(&buf)
-	r.VerifyChecksum = true
+	r := NewReader(&buf, VerifyChecksum)
 
 	n, err := w.Write(in)
 	if err != nil {
