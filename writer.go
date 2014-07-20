@@ -1,11 +1,12 @@
 package snappystream
 
 import (
-	"code.google.com/p/snappy-go/snappy"
 	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
+
+	"code.google.com/p/snappy-go/snappy"
 )
 
 // includes block header
@@ -47,11 +48,14 @@ func NewWriter(w io.Writer) io.Writer {
 func (w *writer) Write(p []byte) (int, error) {
 	total := 0
 	sz := MaxBlockSize
-	for i := 0; i < len(p); i += MaxBlockSize {
+	var n int
+	for i := 0; i < len(p); i += n {
 		if i+sz > len(p) {
 			sz = len(p) - i
 		}
-		n, err := w.write(p[i : i+sz])
+
+		var err error
+		n, err = w.write(p[i : i+sz])
 		if err != nil {
 			return 0, err
 		}
@@ -60,6 +64,9 @@ func (w *writer) Write(p []byte) (int, error) {
 	return total, nil
 }
 
+// write attempts to encode p as a block and write it to the underlying writer.
+// The returned int may not equal p's length if compression below
+// MaxBlockSize-4 could not be achieved.
 func (w *writer) write(p []byte) (int, error) {
 	var err error
 
@@ -71,6 +78,16 @@ func (w *writer) write(p []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	block := w.dst
+	n := len(p)
+	compressed := true
+
+	// check for data which is better left uncompressed.  this is determined if
+	// the encoded content is longer than the source.
+	if len(w.dst) >= len(p) {
+		compressed = false
+		block = p[:n]
+	}
 
 	if !w.sentStreamID {
 		_, err := w.writer.Write(streamID)
@@ -80,17 +97,20 @@ func (w *writer) write(p []byte) (int, error) {
 		w.sentStreamID = true
 	}
 
-	length := uint32(len(w.dst)) + 4 // +4 for checksum
+	if compressed {
+		w.hdr[0] = 0x00 // compressed frame ID
+	} else {
+		w.hdr[0] = 0x01 // uncomprsessed frame ID
+	}
 
-	w.hdr[0] = 0x00 // compressed frame ID
-
-	// 3 byte little endian length
+	// 3 byte little endian length of encoded content
+	length := uint32(len(block)) + 4 // +4 for checksum
 	w.hdr[1] = byte(length)
 	w.hdr[2] = byte(length >> 8)
 	w.hdr[3] = byte(length >> 16)
 
-	// 4 byte little endian CRC32 checksum
-	checksum := maskChecksum(crc32.Checksum(p, crcTable))
+	// 4 byte little endian CRC32 checksum of decoded content
+	checksum := maskChecksum(crc32.Checksum(p[:n], crcTable))
 	w.hdr[4] = byte(checksum)
 	w.hdr[5] = byte(checksum >> 8)
 	w.hdr[6] = byte(checksum >> 16)
@@ -101,12 +121,12 @@ func (w *writer) write(p []byte) (int, error) {
 		return 0, err
 	}
 
-	_, err = w.writer.Write(w.dst)
+	_, err = w.writer.Write(block)
 	if err != nil {
 		return 0, err
 	}
 
-	return len(p), nil
+	return n, nil
 }
 
 func maskChecksum(c uint32) uint32 {

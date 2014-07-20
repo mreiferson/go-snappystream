@@ -2,11 +2,12 @@ package snappystream
 
 import (
 	"bytes"
-	"code.google.com/p/snappy-go/snappy"
 	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
+
+	"code.google.com/p/snappy-go/snappy"
 )
 
 type reader struct {
@@ -51,6 +52,10 @@ func NewReader(r io.Reader, verifyChecksum bool) io.Reader {
 func (r *reader) Read(b []byte) (int, error) {
 	if r.buf.Len() < len(b) {
 		err := r.nextFrame()
+		if err == io.EOF {
+			// fill b with any remaining bytes in the buffer.
+			return r.buf.Read(b)
+		}
 		if err != nil {
 			return 0, err
 		}
