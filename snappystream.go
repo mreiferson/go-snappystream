@@ -23,6 +23,23 @@ const MaxBlockSize = 65536
 const VerifyChecksum = true
 const SkipVerifyChecksum = false
 
+// Block types defined by the snappy framed format specification.
+const (
+	blockCompressed       = 0x00
+	blockUncompressed     = 0x01
+	blockPadding          = 0xfe
+	blockStreamIdentifier = 0xff
+)
+
+// streamID is the stream identifier block that begins a valid snappy framed
+// stream.
+var streamID = []byte{0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59}
+
+// maskChecksum implements the checksum masking algorithm described by the spec.
+func maskChecksum(c uint32) uint32 {
+	return ((c >> 15) | (c << 17)) + 0xa282ead8
+}
+
 var crcTable *crc32.Table
 
 func init() {
