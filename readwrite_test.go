@@ -2,39 +2,64 @@ package snappystream
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 	"io/ioutil"
 	"testing"
 )
 
-func TestReaderWriter(t *testing.T) {
+const TestFileSize = 10 << 20 // 10MB
+
+func testWriteThenRead(t *testing.T, name string, bs []byte) {
 	var buf bytes.Buffer
-
-	in := []byte("test")
-
 	w := NewWriter(&buf)
-	r := NewReader(&buf, VerifyChecksum)
-
-	n, err := w.Write(in)
+	n, err := w.Write(bs)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Errorf("write %v: %v", name, err)
+		return
 	}
-	if n != len(in) {
-		t.Fatalf("wrote wrong amount %d != %d", n, len(in))
+	if n != len(bs) {
+		t.Errorf("write %v: wrote %d bytes (!= %d)", name, n, len(bs))
+		return
 	}
 
-	out := make([]byte, len(in))
-	n, err = r.Read(out)
+	enclen := buf.Len()
+
+	r := NewReader(&buf, true)
+	gotbs, err := ioutil.ReadAll(r)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Errorf("read %v: %v", name, err)
+		return
 	}
-	if n != len(in) {
-		t.Fatalf("read wrong amount %d != %d", n, len(in))
+	n = len(gotbs)
+	if n != len(bs) {
+		t.Errorf("read %v: read %d bytes (!= %d)", name, n, len(bs))
+		return
 	}
 
-	if !bytes.Equal(out, in) {
-		t.Fatalf("bytes not equal %v != %v", out, in)
+	if !bytes.Equal(gotbs, bs) {
+		t.Errorf("%v: unequal decompressed content", name)
+		return
 	}
+
+	c := float64(len(bs)) / float64(enclen)
+	t.Logf("%v compression ratio %.03g", name, c)
+}
+
+func TestWriterReader(t *testing.T) {
+	testWriteThenRead(t, "simple", []byte("test"))
+	testWriteThenRead(t, "manpage", testDataMan)
+	testWriteThenRead(t, "json", testDataJSON)
+
+	p := make([]byte, TestFileSize)
+	testWriteThenRead(t, "constant", p)
+
+	_, err := rand.Read(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testWriteThenRead(t, "random", p)
+
 }
 
 func TestWriterChunk(t *testing.T) {
@@ -67,131 +92,93 @@ func TestWriterChunk(t *testing.T) {
 	}
 }
 
-var testData = []byte(`
-.TH XARGS 1L \" -*- nroff -*-
-.SH NAME
-xargs \- build and execute command lines from standard input
-.SH SYNOPSIS
-.B xargs
-[\-0prtx] [\-e[eof-str]] [\-i[replace-str]] [\-l[max-lines]]
-[\-n max-args] [\-s max-chars] [\-P max-procs] [\-\-null] [\-\-eof[=eof-str]]
-[\-\-replace[=replace-str]] [\-\-max-lines[=max-lines]] [\-\-interactive]
-[\-\-max-chars=max-chars] [\-\-verbose] [\-\-exit] [\-\-max-procs=max-procs]
-[\-\-max-args=max-args] [\-\-no-run-if-empty] [\-\-version] [\-\-help]
-[command [initial-arguments]]
-.SH DESCRIPTION
-This manual page
-documents the GNU version of
-.BR xargs .
-.B xargs
-reads arguments from the standard input, delimited by blanks (which can be
-protected with double or single quotes or a backslash) or newlines,
-and executes the
-.I command
-(default is /bin/echo) one or more times with any
-.I initial-arguments
-followed by arguments read from standard input.  Blank lines on the
-standard input are ignored.
-.P
-.B xargs
-exits with the following status:
-.nf
-0 if it succeeds
-123 if any invocation of the command exited with status 1-125
-124 if the command exited with status 255
-125 if the command is killed by a signal
-126 if the command cannot be run
-127 if the command is not found
-1 if some other error occurred.
-.fi
-.SS OPTIONS
-.TP
-.I "\-\-null, \-0"
-Input filenames are terminated by a null character instead of by
-whitespace, and the quotes and backslash are not special (every
-character is taken literally).  Disables the end of file string, which
-is treated like any other argument.  Useful when arguments might
-contain white space, quote marks, or backslashes.  The GNU find
-\-print0 option produces input suitable for this mode.
-.TP
-.I "\-\-eof[=eof-str], \-e[eof-str]"
-Set the end of file string to \fIeof-str\fR.  If the end of file
-string occurs as a line of input, the rest of the input is ignored.
-If \fIeof-str\fR is omitted, there is no end of file string.  If this
-option is not given, the end of file string defaults to "_".
-.TP
-.I "\-\-help"
-Print a summary of the options to
-.B xargs
-and exit.
-.TP
-.I "\-\-replace[=replace-str], \-i[replace-str]"
-Replace occurences of \fIreplace-str\fR in the initial arguments with
-names read from standard input.
-Also, unquoted blanks do not terminate arguments.
-If \fIreplace-str\fR is omitted, it
-defaults to "{}" (like for 'find \-exec').  Implies \fI\-x\fP and
-\fI\-l 1\fP.
-.TP
-.I "\-\-max-lines[=max-lines], -l[max-lines]"
-Use at most \fImax-lines\fR nonblank input lines per command line;
-\fImax-lines\fR defaults to 1 if omitted.  Trailing blanks cause an
-input line to be logically continued on the next input line.  Implies
-\fI\-x\fR.
-.TP
-.I "\-\-max-args=max-args, \-n max-args"
-Use at most \fImax-args\fR arguments per command line.  Fewer than
-\fImax-args\fR arguments will be used if the size (see the \-s option)
-is exceeded, unless the \-x option is given, in which case \fBxargs\fR
-will exit.
-.TP
-.I "\-\-interactive, \-p"
-Prompt the user about whether to run each command line and read a line
-from the terminal.  Only run the command line if the response starts
-with 'y' or 'Y'.  Implies \fI\-t\fR.
-.TP
-.I "\-\-no-run-if-empty, \-r"
-If the standard input does not contain any nonblanks, do not run the
-command.  Normally, the command is run once even if there is no input.
-.TP
-.I "\-\-max-chars=max-chars, \-s max-chars"
-Use at most \fImax-chars\fR characters per command line, including the
-command and initial arguments and the terminating nulls at the ends of
-the argument strings.  The default is as large as possible, up to 20k
-characters.
-.TP
-.I "\-\-verbose, \-t"
-Print the command line on the standard error output before executing
-it.
-.TP
-.I "\-\-version"
-Print the version number of
-.B xargs
-and exit.
-.TP
-.I "\-\-exit, \-x"
-Exit if the size (see the \fI\-s\fR option) is exceeded.
-.TP
-.I "\-\-max-procs=max-procs, \-P max-procs"
-Run up to \fImax-procs\fR processes at a time; the default is 1.  If
-\fImax-procs\fR is 0, \fBxargs\fR will run as many processes as
-possible at a time.  Use the \fI\-n\fR option with \fI\-P\fR;
-otherwise chances are that only one exec will be done.
-.SH "SEE ALSO"
-\fBfind\fP(1L), \fBlocate\fP(1L), \fBlocatedb\fP(5L), \fBupdatedb\fP(1)
-\fBFinding Files\fP (on-line in Info, or printed)`)
+func BenchmarkWriterManpage(b *testing.B) {
+	benchmarkWriterBytes(b, testDataMan)
+}
 
-func BenchmarkWriter(b *testing.B) {
-	b.SetBytes(int64(len(testData)))
+func BenchmarkWriterJSON(b *testing.B) {
+	benchmarkWriterBytes(b, testDataJSON)
+}
+
+// BenchmarkWriterRandom tests basically uncompressable data.
+func BenchmarkWriterRandom(b *testing.B) {
+	size := TestFileSize
+	randp := make([]byte, size)
+	_, err := rand.Read(randp)
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchmarkWriterBytes(b, randp)
+}
+
+// BenchmarkWriterConstant tests maximally compressible data
+func BenchmarkWriterConstant(b *testing.B) {
+	size := TestFileSize
+	zerop := make([]byte, size)
+	benchmarkWriterBytes(b, zerop)
+}
+
+func benchmarkWriterBytes(b *testing.B, p []byte) {
+	b.SetBytes(int64(len(p)))
 	w := NewWriter(ioutil.Discard)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		n, err := w.Write(testData)
+		n, err := w.Write(p)
 		if err != nil {
 			b.Fatalf(err.Error())
 		}
-		if n != len(testData) {
-			b.Fatalf("wrote wrong amount %d != %d", n, len(testData))
+		if n != len(p) {
+			b.Fatalf("wrote wrong amount %d != %d", n, len(p))
+		}
+	}
+	b.StopTimer()
+}
+
+func BenchmarkReaderManpage(b *testing.B) {
+	benchmarkReaderDiscard(b, testDataMan)
+}
+
+func BenchmarkReaderJSON(b *testing.B) {
+	benchmarkReaderDiscard(b, testDataJSON)
+}
+
+// BenchmarkReaderRandom tests basically uncompressable data.
+func BenchmarkReaderRandom(b *testing.B) {
+	size := TestFileSize
+	randp := make([]byte, size)
+	_, err := rand.Read(randp)
+	if err != nil {
+		b.Fatal(err)
+	}
+	benchmarkReaderDiscard(b, randp)
+}
+
+// BenchmarkReaderConstant tests maximally compressible data
+func BenchmarkReaderConstant(b *testing.B) {
+	size := TestFileSize
+	zerop := make([]byte, size)
+	benchmarkReaderDiscard(b, zerop)
+}
+
+func benchmarkReaderDiscard(b *testing.B, p []byte) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	_, err := w.Write(p)
+	if err != nil {
+		b.Fatal("pre-test compression: %v", err)
+	}
+	encp := buf.Bytes()
+
+	b.SetBytes(int64(len(encp)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r := NewReader(bytes.NewReader(encp), true)
+		n, err := io.Copy(ioutil.Discard, r)
+		if err != nil {
+			b.Fatalf(err.Error())
+		}
+		if n != int64(len(p)) {
+			b.Fatalf("read wrong amount %d != %d", n, len(p))
 		}
 	}
 	b.StopTimer()
