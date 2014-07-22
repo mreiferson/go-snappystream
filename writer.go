@@ -9,9 +9,6 @@ import (
 	"code.google.com/p/snappy-go/snappy"
 )
 
-// includes block header
-var streamID = []byte{0xff, 0x06, 0x00, 0x00, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59}
-
 type writer struct {
 	writer io.Writer
 
@@ -97,10 +94,11 @@ func (w *writer) write(p []byte) (int, error) {
 		w.sentStreamID = true
 	}
 
+	// set the block type
 	if compressed {
-		w.hdr[0] = 0x00 // compressed frame ID
+		w.hdr[0] = blockCompressed
 	} else {
-		w.hdr[0] = 0x01 // uncomprsessed frame ID
+		w.hdr[0] = blockUncompressed
 	}
 
 	// 3 byte little endian length of encoded content
@@ -127,8 +125,4 @@ func (w *writer) write(p []byte) (int, error) {
 	}
 
 	return n, nil
-}
-
-func maskChecksum(c uint32) uint32 {
-	return ((c >> 15) | (c << 17)) + 0xa282ead8
 }

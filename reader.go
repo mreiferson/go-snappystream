@@ -37,6 +37,8 @@ type reader struct {
 // For each Read, the returned length will be up to the lesser of len(b) or 65536
 // decompressed bytes, regardless of the length of *compressed* bytes read
 // from the wrapped io.Reader.
+//
+// BUG: padding is not allowed to be larger than MaxBlockSize.
 func NewReader(r io.Reader, verifyChecksum bool) io.Reader {
 	return &reader{
 		reader: r,
@@ -75,16 +77,15 @@ func (r *reader) nextFrame() error {
 			return err
 		}
 
-		switch r.hdr[0] {
-		case 0x00, 0x01:
+		switch typ := r.hdr[0]; typ {
+		case blockCompressed, blockUncompressed:
 			// compressed or uncompressed bytes
 
 			// first 4 bytes are the little endian crc32 checksum
 			checksum := unmaskChecksum(uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24)
 			b := buf[4:]
 
-			if r.hdr[0] == 0x00 {
-				// compressed bytes
+			if typ == blockCompressed {
 				r.dst, err = snappy.Decode(r.dst, b)
 				if err != nil {
 					return err
@@ -101,14 +102,21 @@ func (r *reader) nextFrame() error {
 
 			_, err = r.buf.Write(b)
 			return err
-		case 0xff:
-			// stream identifier
-			if !bytes.Equal(buf, []byte{0x73, 0x4e, 0x61, 0x50, 0x70, 0x59}) {
+		case blockPadding:
+			// do not verify block checksum or inspect data in any way.
+			continue
+		case blockStreamIdentifier:
+			if !bytes.Equal(buf, streamID[4:]) {
 				return errors.New("invalid stream ID")
 			}
-			// continue...
+			continue
 		default:
-			return errors.New("invalid frame identifier")
+			if typ >= 0x80 && typ <= 0xfd {
+				// backwards compatible block type defined to be skippable
+				continue
+			}
+
+			return fmt.Errorf("unrecognized unskippable frame %#x", typ)
 		}
 	}
 	panic("should never happen")
