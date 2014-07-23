@@ -148,7 +148,7 @@ func TestWriterChunk(t *testing.T) {
 	out := make([]byte, len(in))
 	n, err = io.ReadFull(r, out)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err)
 	}
 	if n != len(in) {
 		t.Fatalf("read wrong amount %d != %d", n, len(in))
@@ -216,7 +216,7 @@ func benchmarkWriterBytes(b *testing.B, p []byte) {
 		w := NewWriter(ioutil.Discard) // create every time for stream identifier
 		n, err := io.Copy(w, dummyBytesReader(p))
 		if err != nil {
-			b.Fatalf(err.Error())
+			b.Fatal(err)
 		}
 		if n != int64(len(p)) {
 			b.Fatalf("wrote wrong amount %d != %d", n, len(p))
@@ -300,7 +300,7 @@ func benchmarkReaderDiscard(b *testing.B, p []byte) {
 	w := NewWriter(&buf)
 	_, err := io.Copy(w, dummyBytesReader(p))
 	if err != nil {
-		b.Fatal("pre-test compression: %v", err)
+		b.Fatalf("pre-test compression: %v", err)
 	}
 	encp := buf.Bytes()
 
@@ -324,11 +324,11 @@ func benchmarkReaderDiscard_buffered(b *testing.B, p []byte) {
 	w := NewBufferedWriter(&buf)
 	_, err := io.Copy(w, dummyBytesReader(p))
 	if err != nil {
-		b.Fatal("pre-test compression: %v", err)
+		b.Fatalf("pre-test compression: %v", err)
 	}
 	err = w.Close()
 	if err != nil {
-		b.Fatal("pre-test compression: %v", err)
+		b.Fatalf("pre-test compression: %v", err)
 	}
 	encp := buf.Bytes()
 

@@ -92,6 +92,7 @@ func (w *BufferedWriter) Close() error {
 
 type writer struct {
 	writer io.Writer
+	err    error
 
 	hdr []byte
 	dst []byte
@@ -120,6 +121,10 @@ func NewWriter(w io.Writer) io.Writer {
 }
 
 func (w *writer) Write(p []byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+
 	total := 0
 	sz := MaxBlockSize
 	var n int
@@ -128,10 +133,9 @@ func (w *writer) Write(p []byte) (int, error) {
 			sz = len(p) - i
 		}
 
-		var err error
-		n, err = w.write(p[i : i+sz])
-		if err != nil {
-			return 0, err
+		n, w.err = w.write(p[i : i+sz])
+		if w.err != nil {
+			return 0, w.err
 		}
 		total += n
 	}

@@ -108,7 +108,7 @@ func TestBufferedWriterFlush(t *testing.T) {
 		}
 		err = bw.Flush()
 		if err != nil {
-			t.Fatal("flush: %v", err)
+			t.Fatalf("flush: %v", err)
 		}
 	}
 	err := bw.Close()
