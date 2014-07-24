@@ -1,6 +1,7 @@
 package snappystream
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -8,6 +9,83 @@ import (
 
 	"code.google.com/p/snappy-go/snappy"
 )
+
+var errClosed = fmt.Errorf("closed")
+
+// BufferedWriter is an io.WriteCloser with behavior similar to writers
+// returned by NewWriter but it buffers written data, maximizing block size (to
+// improve the output compression ratio) at the cost of speed. Benefits over
+// NewWriter are most noticible when individual writes are small and when
+// streams are long.
+//
+// Failure to call a BufferedWriter's Close or Flush methods after it is done
+// being written to will likely result in missing data frames which will be
+// undetectable in the decoding process.
+type BufferedWriter struct {
+	err error
+	w   *writer
+	bw  *bufio.Writer
+}
+
+// NewBufferedWriter allocates and returns a BufferedWriter with an internal
+// buffer of MaxBlockSize bytes.  If an error occurs writing a block to w, all
+// future writes will fail with the same error.  After all data has been
+// written, the client should call the Flush method to guarantee all data has
+// been forwarded to the underlying io.Writer.
+func NewBufferedWriter(w io.Writer) *BufferedWriter {
+	_w := NewWriter(w).(*writer)
+	return &BufferedWriter{
+		w:  _w,
+		bw: bufio.NewWriterSize(_w, MaxBlockSize),
+	}
+}
+
+// Write buffers p internally, encoding and writing a block to the underlying
+// buffer if the buffer grows beyond MaxBlockSize bytes.  The returned int
+// will be 0 if there was an error and len(p) otherwise.
+func (w *BufferedWriter) Write(p []byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+
+	_, w.err = w.bw.Write(p)
+	if w.err != nil {
+		return 0, w.err
+	}
+
+	return len(p), nil
+}
+
+// Flush encodes and writes a block with the contents of w's internal buffer to
+// the underlying writer even if the buffer does not contain a full block of
+// data (MaxBlockSize bytes).
+func (w *BufferedWriter) Flush() error {
+	if w.err == nil {
+		w.err = w.bw.Flush()
+	}
+
+	return w.err
+}
+
+// Close flushes w's internal buffer and tears down internal data structures.
+// After a successful call to Close method calls on w return an error.  Close
+// makes no attempt to close the underlying writer.
+func (w *BufferedWriter) Close() error {
+	if w.err != nil {
+		return w.err
+	}
+
+	w.err = w.bw.Flush()
+	w.w = nil
+	w.bw = nil
+
+	if w.err != nil {
+		return w.err
+	}
+
+	w.err = errClosed
+	return nil
+}
 
 type writer struct {
 	writer io.Writer
@@ -18,21 +96,17 @@ type writer struct {
 	sentStreamID bool
 }
 
-// NewWriter returns an io.Writer interface to the snappy framed stream format.
+// NewWriter returns an io.Writer that writes its input to an underlying
+// io.Writer encoded as a snappy framed stream.  A stream identifier block is
+// written to w preceding the first data block.  The returned writer will never
+// emit a block with length in bytes greater than MaxBlockSize+4 nor one
+// containing more than MaxBlockSize bytes of (uncompressed) data.
 //
-// It transparently handles sending the stream identifier, calculating
-// checksums, and compressing/framing blocks.
-//
-// Internally, a buffer is maintained to hold a compressed
-// block.  It will automatically re-size up the the largest
-// block size, 65536.
-//
-// For each Write, the returned length will only ever be len(p) or 0, regardless
-// of the length of *compressed* bytes written to the wrapped io.Writer.
-//
-// If the returned length is 0 then error will be non-nil.
-//
-// If len(p) exceeds 65536, the slice will be automatically chunked into smaller blocks.
+// For each Write, the returned length will only ever be len(p) or 0,
+// regardless of the length of *compressed* bytes written to the wrapped
+// io.Writer.  If the returned length is 0 then error will be non-nil.  If
+// len(p) exceeds 65536, the slice will be automatically chunked into smaller
+// blocks which are all emitted before the call returns.
 func NewWriter(w io.Writer) io.Writer {
 	return &writer{
 		writer: w,
