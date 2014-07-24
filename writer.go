@@ -21,6 +21,9 @@ var errClosed = fmt.Errorf("closed")
 // Failure to call a BufferedWriter's Close or Flush methods after it is done
 // being written to will likely result in missing data frames which will be
 // undetectable in the decoding process.
+//
+// NOTE: BufferedWriter cannot be instantiated via struct literal and must
+// use NewBufferedWriter (i.e. its zero value is not usable).
 type BufferedWriter struct {
 	err error
 	w   *writer
