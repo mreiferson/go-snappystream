@@ -148,6 +148,7 @@ func (w *writer) write(p []byte) (int, error) {
 		return 0, errors.New(fmt.Sprintf("block too large %d > %d", len(p), MaxBlockSize))
 	}
 
+	w.dst = w.dst[:cap(w.dst)] // Encode does dumb resize w/o context. reslice avoids alloc.
 	w.dst, err = snappy.Encode(w.dst, p)
 	if err != nil {
 		return 0, err
