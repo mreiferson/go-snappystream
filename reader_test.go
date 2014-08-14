@@ -110,3 +110,43 @@ func TestReader_unskippable(t *testing.T) {
 		t.Fatalf("read success")
 	}
 }
+
+func TestReaderStreamID(t *testing.T) {
+	data := []byte("a snappy-framed data stream")
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	_, err := w.Write(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream := buf.Bytes()
+
+	// sanity check: the stream can be decoded and starts with streamID
+	r := NewReader(bytes.NewReader(stream), true)
+	_, err = ioutil.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !bytes.HasPrefix(stream, streamID) {
+		t.Fatal("missing stream id")
+	}
+
+	// steramNoID is valid except for a missing the streamID block
+	streamNoID := bytes.TrimPrefix(stream, streamID)
+	r = NewReader(bytes.NewReader(streamNoID), true)
+	n, err := r.Read(make([]byte, 1))
+	if err == nil {
+		t.Fatalf("read: expected an error reading input missing a stream identifier block")
+	}
+	if n != 0 {
+		t.Fatalf("read: read non-zero number of bytes %d", n)
+	}
+	n, err = r.Read(make([]byte, 1))
+	if err == nil {
+		t.Fatalf("read: successful read after missing stream id error")
+	}
+	if n != 0 {
+		t.Fatalf("read: read non-zero number of bytes %d after missing stream id error", n)
+	}
+}

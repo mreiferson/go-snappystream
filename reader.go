@@ -13,6 +13,9 @@ import (
 type reader struct {
 	reader io.Reader
 
+	err error
+
+	seenStreamID   bool
 	verifyChecksum bool
 
 	buf bytes.Buffer
@@ -51,18 +54,29 @@ func NewReader(r io.Reader, verifyChecksum bool) io.Reader {
 	}
 }
 
+func (r *reader) read(b []byte) (int, error) {
+	n, err := r.buf.Read(b)
+	r.err = err
+	return n, err
+}
+
 func (r *reader) Read(b []byte) (int, error) {
+	if r.err != nil {
+		return 0, r.err
+	}
+
 	if r.buf.Len() < len(b) {
-		err := r.nextFrame()
-		if err == io.EOF {
+		r.err = r.nextFrame()
+		if r.err == io.EOF {
 			// fill b with any remaining bytes in the buffer.
-			return r.buf.Read(b)
+			return r.read(b)
 		}
-		if err != nil {
-			return 0, err
+		if r.err != nil {
+			return 0, r.err
 		}
 	}
-	return r.buf.Read(b)
+
+	return r.read(b)
 }
 
 func (r *reader) nextFrame() error {
@@ -70,6 +84,18 @@ func (r *reader) nextFrame() error {
 		_, err := io.ReadFull(r.reader, r.hdr)
 		if err != nil {
 			return err
+		}
+
+		// ensure the first block of the stream is a stream identifier.  check
+		// the header before reading the block to avoid unnecessary work.
+		if !r.seenStreamID {
+			if r.hdr[0] != blockStreamIdentifier {
+				return fmt.Errorf("missing stream identifier %#x", r.hdr[0])
+			}
+			if !bytes.Equal(r.hdr, streamID[:4]) {
+				return fmt.Errorf("invalid stream identifier header %v", r.hdr)
+			}
+			r.seenStreamID = true
 		}
 
 		buf, err := r.readBlock()
