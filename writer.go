@@ -43,6 +43,20 @@ func NewBufferedWriter(w io.Writer) *BufferedWriter {
 	}
 }
 
+// ReadFrom implements the io.ReaderFrom interface used by io.Copy. It encodes
+// data read from r as a snappy framed stream that is written to the underlying
+// writer.  ReadFrom returns the number number of bytes read, along with any
+// error encountered (other than io.EOF).
+func (w *BufferedWriter) ReadFrom(r io.Reader) (int64, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+
+	var n int64
+	n, w.err = w.bw.ReadFrom(r)
+	return n, w.err
+}
+
 // Write buffers p internally, encoding and writing a block to the underlying
 // buffer if the buffer grows beyond MaxBlockSize bytes.  The returned int
 // will be 0 if there was an error and len(p) otherwise.

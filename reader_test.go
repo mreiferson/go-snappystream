@@ -518,3 +518,32 @@ func opaqueChunk(b byte, n int) []byte {
 	h = append(h, padbytes...)
 	return h
 }
+
+func TestReaderWriteTo(t *testing.T) {
+	var encbuf bytes.Buffer
+	var decbuf bytes.Buffer
+	msg := "hello copy interface"
+
+	w := NewWriter(&encbuf)
+	n, err := io.WriteString(w, msg)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	if n != len(msg) {
+		t.Fatalf("encode: %v", err)
+	}
+
+	r := NewReader(&encbuf, true)
+	n64, err := r.(*reader).WriteTo(&decbuf)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if n64 != int64(len(msg)) {
+		t.Fatalf("decode: decoded %d bytes %q", n64, decbuf.Bytes())
+	}
+
+	decmsg := decbuf.String()
+	if decmsg != msg {
+		t.Fatalf("decode: %q", decmsg)
+	}
+}

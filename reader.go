@@ -57,6 +57,28 @@ func NewReader(r io.Reader, verifyChecksum bool) io.Reader {
 	}
 }
 
+// WriteTo implements the io.WriterTo interface used by io.Copy.  It writes
+// decoded data from the underlying reader to w.  WriteTo returns the number of
+// bytes written along with any error encountered.
+func (r *reader) WriteTo(w io.Writer) (int64, error) {
+	n, err := r.buf.WriteTo(w)
+	if err != nil {
+		return n, err
+	}
+	for {
+		var m int
+		m, err = r.nextFrame(w)
+		n += int64(m)
+		if err != nil {
+			break
+		}
+	}
+	if err == io.EOF {
+		err = nil
+	}
+	return n, err
+}
+
 func (r *reader) read(b []byte) (int, error) {
 	n, err := r.buf.Read(b)
 	r.err = err
@@ -69,7 +91,7 @@ func (r *reader) Read(b []byte) (int, error) {
 	}
 
 	if r.buf.Len() < len(b) {
-		r.err = r.nextFrame()
+		_, r.err = r.nextFrame(&r.buf)
 		if r.err == io.EOF {
 			// fill b with any remaining bytes in the buffer.
 			return r.read(b)
@@ -82,12 +104,12 @@ func (r *reader) Read(b []byte) (int, error) {
 	return r.read(b)
 }
 
-func (r *reader) nextFrame() error {
+func (r *reader) nextFrame(w io.Writer) (int, error) {
 	for {
 		// read the 4-byte snappy frame header
 		_, err := io.ReadFull(r.reader, r.hdr)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		// a stream identifier may appear anywhere and contains no information.
@@ -96,24 +118,24 @@ func (r *reader) nextFrame() error {
 		if r.hdr[0] == blockStreamIdentifier {
 			err := r.readStreamID()
 			if err != nil {
-				return err
+				return 0, err
 			}
 			r.seenStreamID = true
 			continue
 		}
 		if !r.seenStreamID {
-			return errMissingStreamID
+			return 0, errMissingStreamID
 		}
 
 		switch typ := r.hdr[0]; {
 		case typ == blockCompressed || typ == blockUncompressed:
-			return r.decodeBlock()
+			return r.decodeBlock(w)
 		case typ == blockPadding || (0x80 <= typ && typ <= 0xfd):
 			// skip blocks whose data must not be inspected (4.4 Padding, and 4.6
 			// Reserved skippable chunks).
 			err := r.discardBlock()
 			if err != nil {
-				return err
+				return 0, err
 			}
 			continue
 		default:
@@ -121,31 +143,31 @@ func (r *reader) nextFrame() error {
 			// and return an error (4.5 Reserved unskippable chunks).
 			err = r.discardBlock()
 			if err != nil {
-				return err
+				return 0, err
 			}
-			return fmt.Errorf("unrecognized unskippable frame %#x", r.hdr[0])
+			return 0, fmt.Errorf("unrecognized unskippable frame %#x", r.hdr[0])
 		}
 	}
 }
 
 // decodeDataBlock assumes r.hdr[0] to be either blockCompressed or
 // blockUncompressed.
-func (r *reader) decodeBlock() error {
+func (r *reader) decodeBlock(w io.Writer) (int, error) {
 	// read compressed block data and determine if uncompressed data is too
 	// large.
 	buf, err := r.readBlock()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	declen := len(buf[4:])
 	if r.hdr[0] == blockCompressed {
 		declen, err = snappy.DecodedLen(buf[4:])
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 	if declen > MaxBlockSize {
-		return fmt.Errorf("decoded block data too large %d > %d", declen, MaxBlockSize)
+		return 0, fmt.Errorf("decoded block data too large %d > %d", declen, MaxBlockSize)
 	}
 
 	// decode data and verify its integrity using the little-endian crc32
@@ -154,7 +176,7 @@ func (r *reader) decodeBlock() error {
 	if r.hdr[0] == blockCompressed {
 		r.dst, err = snappy.Decode(r.dst, blockdata)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		blockdata = r.dst
 	}
@@ -162,11 +184,10 @@ func (r *reader) decodeBlock() error {
 		checksum := unmaskChecksum(uint32(crc32le[0]) | uint32(crc32le[1])<<8 | uint32(crc32le[2])<<16 | uint32(crc32le[3])<<24)
 		actualChecksum := crc32.Checksum(blockdata, crcTable)
 		if checksum != actualChecksum {
-			return fmt.Errorf("checksum does not match %x != %x", checksum, actualChecksum)
+			return 0, fmt.Errorf("checksum does not match %x != %x", checksum, actualChecksum)
 		}
 	}
-	_, err = r.buf.Write(blockdata)
-	return err
+	return w.Write(blockdata)
 }
 
 func (r *reader) readStreamID() error {
