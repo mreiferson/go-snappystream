@@ -5,6 +5,8 @@ package snappystream
 
 import (
 	"hash/crc32"
+
+	"code.google.com/p/snappy-go/snappy"
 )
 
 // Ext is the file extension for files whose content is a snappy framed stream.
@@ -20,6 +22,11 @@ const ContentEncoding = "x-snappy-framed"
 // MaxBlockSize is the maximum number of decoded bytes allowed to be
 // represented in a snappy framed block (sections 4.2 and 4.3).
 const MaxBlockSize = 65536
+
+// maxEncodedBlockSize is the maximum number of encoded bytes in a framed
+// block.
+var maxEncodedBlockSize = uint32(snappy.MaxEncodedLen(MaxBlockSize))
+
 const VerifyChecksum = true
 const SkipVerifyChecksum = false
 
