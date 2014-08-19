@@ -178,23 +178,10 @@ func (w *writer) write(p []byte) (int, error) {
 
 	// set the block type
 	if compressed {
-		w.hdr[0] = blockCompressed
+		writeHeader(w.hdr, blockCompressed, block, p[:n])
 	} else {
-		w.hdr[0] = blockUncompressed
+		writeHeader(w.hdr, blockUncompressed, block, p[:n])
 	}
-
-	// 3 byte little endian length of encoded content
-	length := uint32(len(block)) + 4 // +4 for checksum
-	w.hdr[1] = byte(length)
-	w.hdr[2] = byte(length >> 8)
-	w.hdr[3] = byte(length >> 16)
-
-	// 4 byte little endian CRC32 checksum of decoded content
-	checksum := maskChecksum(crc32.Checksum(p[:n], crcTable))
-	w.hdr[4] = byte(checksum)
-	w.hdr[5] = byte(checksum >> 8)
-	w.hdr[6] = byte(checksum >> 16)
-	w.hdr[7] = byte(checksum >> 24)
 
 	_, err = w.writer.Write(w.hdr)
 	if err != nil {
@@ -207,4 +194,22 @@ func (w *writer) write(p []byte) (int, error) {
 	}
 
 	return n, nil
+}
+
+// writeHeader panics if len(hdr) is less than 8.
+func writeHeader(hdr []byte, btype byte, enc, dec []byte) {
+	hdr[0] = btype
+
+	// 3 byte little endian length of encoded content
+	length := uint32(len(enc)) + 4 // +4 for checksum
+	hdr[1] = byte(length)
+	hdr[2] = byte(length >> 8)
+	hdr[3] = byte(length >> 16)
+
+	// 4 byte little endian CRC32 checksum of decoded content
+	checksum := maskChecksum(crc32.Checksum(dec, crcTable))
+	hdr[4] = byte(checksum)
+	hdr[5] = byte(checksum >> 8)
+	hdr[6] = byte(checksum >> 16)
+	hdr[7] = byte(checksum >> 24)
 }
