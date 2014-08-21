@@ -126,6 +126,7 @@ func (r *reader) nextFrame() error {
 			return fmt.Errorf("unrecognized unskippable frame %#x", r.hdr[0])
 		}
 	}
+	return nil
 }
 
 // decodeDataBlock assumes r.hdr[0] to be either blockCompressed or
