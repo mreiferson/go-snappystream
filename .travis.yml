@@ -8,6 +8,6 @@ env:
 install:
   - go get code.google.com/p/snappy-go/snappy
 script:
-  - ./test.sh
+  - go test -v
 notifications:
   email: false
