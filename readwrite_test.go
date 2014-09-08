@@ -256,7 +256,7 @@ func BenchmarkReaderManpage_buffered(b *testing.B) {
 	encodeAndBenchmarkReader_buffered(b, testDataMan)
 }
 func BenchmarkReaderManpageNoCopy(b *testing.B) {
-	encodeAndBenchmarkReader_buffered(b, testDataMan)
+	encodeAndBenchmarkReaderNoCopy(b, testDataMan)
 }
 
 func BenchmarkReaderJSON(b *testing.B) {
@@ -266,7 +266,7 @@ func BenchmarkReaderJSON_buffered(b *testing.B) {
 	encodeAndBenchmarkReader_buffered(b, testDataJSON)
 }
 func BenchmarkReaderJSONNoCopy(b *testing.B) {
-	encodeAndBenchmarkReader_buffered(b, testDataJSON)
+	encodeAndBenchmarkReaderNoCopy(b, testDataJSON)
 }
 
 // BenchmarkReaderRandom tests decoding of effectively uncompressable data.
@@ -323,12 +323,12 @@ func encodeAndBenchmarkReader_buffered(b *testing.B, p []byte) {
 	benchmarkDecode(b, dec, int64(len(p)), enc)
 }
 
-// encodeAndBenchmarkReader_nocopy is a helper that benchmarks the
+// encodeAndBenchmarkReaderNoCopy is a helper that benchmarks the
 // package reader's performance given p encoded as a snappy framed stream.
 // encodeAndBenchmarReaderNoCopy avoids use of the reader's io.WriterTo
 // interface.
 //
-// encodeAndBenchmarkReader_nocopy benchmarks decoding of streams that
+// encodeAndBenchmarkReaderNoCopy benchmarks decoding of streams that
 // contain at most one short frame (at the end).
 func encodeAndBenchmarkReaderNoCopy(b *testing.B, p []byte) {
 	enc, err := encodeStreamBytes(p, true)
