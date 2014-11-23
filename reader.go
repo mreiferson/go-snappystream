@@ -61,22 +61,83 @@ func NewReader(r io.Reader, verifyChecksum bool) io.Reader {
 // decoded data from the underlying reader to w.  WriteTo returns the number of
 // bytes written along with any error encountered.
 func (r *reader) WriteTo(w io.Writer) (int64, error) {
+	if r.err != nil {
+		return 0, r.err
+	}
+
 	n, err := r.buf.WriteTo(w)
 	if err != nil {
+		// r.err doesn't need to be set because a write error occurred and the
+		// stream hasn't been corrupted.
 		return n, err
 	}
+
+	// pass a bufferFallbackWriter to nextFrame so that write errors may be
+	// recovered from, allowing the unwritten stream to be read successfully.
+	wfallback := r.bufferFallbackWriter(w)
 	for {
 		var m int
-		m, err = r.nextFrame(w)
+		m, err = r.nextFrame(wfallback)
+		if wfallback.writerErr != nil && err == nil {
+			// a partial write was made before an error occurred and not all m
+			// bytes were writen to w.  but decoded bytes were successfully
+			// buffered and reading can resume later.
+			n += wfallback.n
+			return n, wfallback.writerErr
+		}
 		n += int64(m)
+		if err == io.EOF {
+			return n, nil
+		}
 		if err != nil {
-			break
+			r.err = err
+			return n, err
 		}
 	}
-	if err == io.EOF {
-		err = nil
+	panic("unreachable")
+}
+
+func (r *reader) bufferFallbackWriter(w io.Writer) *bufferFallbackWriter {
+	return &bufferFallbackWriter{
+		w:   w,
+		buf: &r.buf,
 	}
-	return n, err
+}
+
+// bufferFallbackWriter writes to an underlying io.Writer until an error
+// occurs.  If a error occurs in the underlying io.Writer the value is saved
+// for later inspection while the bufferFallbackWriter silently starts
+// buffering all data written to it. From the caller's perspective
+// bufferFallbackWriter has the same Write behavior has a bytes.Buffer.
+//
+// bufferFallbackWriter is useful for the reader.WriteTo method because it
+// allows internal decoding routines to avoid interruption (and subsequent
+// stream corruption) due to writing errors.
+type bufferFallbackWriter struct {
+	w         io.Writer
+	buf       *bytes.Buffer
+	n         int64 // number of bytes successfully written to w
+	writerErr error // any error that ocurred writing to w
+}
+
+// Write attempts to write b to the underlying io.Writer.  If the underlying
+// writer fails or has failed previously unwritten bytes are buffered
+// internally.  Write never returns an error but may panic with
+// bytes.ErrTooLarge if the buffer grows too large.
+func (w *bufferFallbackWriter) Write(b []byte) (int, error) {
+	if w.writerErr != nil {
+		return w.buf.Write(b)
+	}
+	n, err := w.w.Write(b)
+	w.n += int64(n)
+	if err != nil {
+		// begin buffering input. bytes.Buffer does not return errors and so we
+		// do not need complex error handling here.
+		w.writerErr = err
+		w.Write(b[n:])
+		return len(b), nil
+	}
+	return n, nil
 }
 
 func (r *reader) read(b []byte) (int, error) {

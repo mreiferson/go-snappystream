@@ -547,3 +547,104 @@ func TestReaderWriteTo(t *testing.T) {
 		t.Fatalf("decode: %q", decmsg)
 	}
 }
+
+func TestReaderWriteToPreviousError(t *testing.T) {
+	// construct an io.Reader that returns an error on the first read and a
+	// valid snappy-framed stream on subsequent reads.
+	var stream io.Reader
+	stream = encodedString("hello")
+	stream = readErrorFirst(stream, fmt.Errorf("one time error"))
+	stream = NewReader(stream, true)
+
+	var buf bytes.Buffer
+
+	// attempt the first read from the stream.
+	n, err := stream.(*reader).WriteTo(&buf)
+	if err == nil {
+		t.Fatalf("error expected")
+	}
+	if n != 0 {
+		t.Fatalf("bytes written to buffer: %q", buf.Bytes())
+	}
+
+	// attempt a second read from the stream.
+	n, err = stream.(*reader).WriteTo(&buf)
+	if err == nil {
+		t.Fatalf("error expected")
+	}
+	if n != 0 {
+		t.Fatalf("bytes written to buffer: %q", buf.Bytes())
+	}
+}
+
+// readerErrorFirst is an io.Reader that returns an error on the first read.
+// readerErrorFirst is used to test that a reader does not attempt to read
+// after a read error occurs.
+type readerErrorFirst struct {
+	r     io.Reader
+	err   error
+	count int
+}
+
+func readErrorFirst(r io.Reader, err error) io.Reader {
+	return &readerErrorFirst{
+		r:   r,
+		err: err,
+	}
+}
+
+func (r *readerErrorFirst) Read(b []byte) (int, error) {
+	r.count++
+	if r.count == 1 {
+		return 0, r.err
+	}
+	return r.r.Read(b)
+}
+
+func TestReaderWriteToWriteError(t *testing.T) {
+	origmsg := "hello"
+	stream := NewReader(encodedString(origmsg), true)
+
+	// attempt to write the stream to an io.Writer that will not accept input.
+	n, err := stream.(*reader).WriteTo(unwritable(fmt.Errorf("cannot write to this writer")))
+	if err == nil {
+		t.Fatalf("error expected")
+	}
+	if n != 0 {
+		t.Fatalf("reported %d written to an unwritable writer", n)
+	}
+
+	// the decoded message can still be read successfully because the encoded
+	// stream was not corrupt/broken.
+	var buf bytes.Buffer
+	n, err = stream.(*reader).WriteTo(&buf)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if n != int64(len(origmsg)) {
+		t.Errorf("read %d bytes", n)
+	}
+	if buf.String() != origmsg {
+		t.Errorf("read %q", buf)
+	}
+}
+
+// writerUnwritable is an io.Writer that always returns an error.
+type writerUnwritable struct {
+	err error
+}
+
+func (w *writerUnwritable) Write([]byte) (int, error) {
+	return 0, w.err
+}
+
+func unwritable(err error) io.Writer {
+	return &writerUnwritable{err}
+}
+
+func encodedString(s string) io.Reader {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	io.WriteString(w, s)
+	return &buf
+}
