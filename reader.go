@@ -74,7 +74,10 @@ func (r *reader) WriteTo(w io.Writer) (int64, error) {
 
 	// pass a bufferFallbackWriter to nextFrame so that write errors may be
 	// recovered from, allowing the unwritten stream to be read successfully.
-	wfallback := r.bufferFallbackWriter(w)
+	wfallback := &bufferFallbackWriter{
+		w:   w,
+		buf: &r.buf,
+	}
 	for {
 		var m int
 		m, err = r.nextFrame(wfallback)
@@ -95,13 +98,6 @@ func (r *reader) WriteTo(w io.Writer) (int64, error) {
 		}
 	}
 	panic("unreachable")
-}
-
-func (r *reader) bufferFallbackWriter(w io.Writer) *bufferFallbackWriter {
-	return &bufferFallbackWriter{
-		w:   w,
-		buf: &r.buf,
-	}
 }
 
 // bufferFallbackWriter writes to an underlying io.Writer until an error
