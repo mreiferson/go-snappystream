@@ -7,7 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 
-	"code.google.com/p/snappy-go/snappy"
+	"github.com/mreiferson/go-snappystream/snappy-go"
 )
 
 // errMssingStreamID is returned from a reader when the source stream does not

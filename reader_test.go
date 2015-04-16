@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"code.google.com/p/snappy-go/snappy"
+	"github.com/mreiferson/go-snappystream/snappy-go"
 )
 
 // This test checks that padding and reserved skippable blocks are ignored by

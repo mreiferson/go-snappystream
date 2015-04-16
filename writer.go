@@ -7,7 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 
-	"code.google.com/p/snappy-go/snappy"
+	"github.com/mreiferson/go-snappystream/snappy-go"
 )
 
 var errClosed = fmt.Errorf("closed")
